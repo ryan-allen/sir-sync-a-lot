@@ -1,0 +1,97 @@
+#!/usr/bin/env ruby
+
+# todo
+# ./sir-syncalot setup
+#   - asks for aws creds and bucket
+#   - checks if bucket is empty or not exists and prompts and shit
+#   - asks for filepath (abs is best)
+#   - asks for job name (defualts to default) and shit, stores in ~/.sir-syncalot/config.yml
+#   - asks for log path
+# ./sir-syncalot sync [job]
+#   - looks for last sync saved on disk
+#   - checks for lock, places one otherwise
+#   - does md5 otherwise and syncs with output and logs too!
+
+class SirSyncalot
+
+  def self.run!(*args)
+    new(*args).run!
+  end
+
+  [:action, :job].each { |member| attr(member) }
+
+  def initialize(action = "sync", job = "default")
+    @action, @job = action, job
+  end
+
+  def run!
+    validate_inputs!
+    perform_action!
+  end
+
+private
+
+  def validate_inputs!
+    if setup_action? and config_exists?
+      exit_with_error!("Can't make a setup, because there's already a configuration in '#{config_path}'.")
+    elsif sync_action? and !config_exists?
+      exit_with_error!("Can't make a sync, because there's no configuration, try 'sir-syncalot setup'.")
+    end
+  end
+
+  def perform_action!
+    if setup_action?
+      perform_setup!
+    elsif sync_action?
+      perform_sync!
+    elsif help_action?
+      display_help!
+    else
+      exit_with_error!("Cannot perform action '#{@action}', try 'sir-syncalot help' for usage.")
+    end
+  end
+
+  def setup_action?
+    action == "setup"
+  end
+
+  def sync_action?
+    action == "sync"
+  end
+
+  def help_action?
+    action == "help"
+  end
+
+  def perform_setup!
+    display("Setup...")
+  end
+
+  def perform_sync!
+    display("Syncing #{job}...")
+  end
+
+  def display_help!
+    display("Hahaha. Sif.")
+  end
+
+  def exit_with_error!(message)
+    display("Sir Syncalot wails in agony! " + message)
+    exit
+  end
+
+  def display(message)
+    puts(message)
+  end
+
+  def config_exists?
+    File.exist?(config_path)
+  end
+
+  def config_path
+    ENV['HOME'] + "/.sir-syncalot/config.yml"
+  end
+
+end
+
+SirSyncalot.run!(*ARGV)
