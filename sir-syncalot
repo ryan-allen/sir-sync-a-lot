@@ -18,10 +18,10 @@ class SirSyncalot
     new(*args).run!
   end
 
-  [:action, :job].each { |member| attr(member) }
+  [:action, :config].each { |member| attr(member) }
 
-  def initialize(action = "sync", job = "default")
-    @action, @job = action, job
+  def initialize(action = "sync")
+    @action = action
   end
 
   def run!
@@ -64,11 +64,74 @@ private
   end
 
   def perform_setup!
-    display("Setup...")
+    display("Hello! Ima ask you a few questions, and store the results in #{config_path} for later, OK?")
+
+    config = {}
+
+    config[:aws_access_key] = ask("What is the AWS access key?")
+    config[:aws_secret_key] = ask("What is the AWS secret access key?")
+    display("Just a sec, ima check that works...")
+    if aws_credentials_valid?(config)
+      display("Yep, all good.")
+      config[:aws_dest_bucket] = ask("What bucket should we put your backups in? (If it doesn't exist I'll create it)")
+      if bucket_exists?(config)
+        if bucket_empty?(config)
+          display("I found that the bucket already exists, and it's empty so I'm happy.")
+        else
+          exit_with_error!("I found the bucket to exist, but it's not empty. I can't sync to a bucket that is not empty.")
+        end
+      else
+        display("The bucket doesn't exist, so I'm creating it now...")
+        create_bucket(config)
+        display("OK that's done.")
+      end
+    else
+      exit_with_error!("I couldn't connect to S3 with the credentials you supplied, try again much?")
+    end
+
+    config[:local_file_path] = ask("What is the (absolute) path that you want to back up? (i.e. /var/www not ./www)")
+    if !local_file_path_exists?
+      exit_with_error!("I find that the local file path you supplied doesn't exist, wrong much?")
+    end
+
+    display("Right, I'm writing out the details you supplied to '#{config_path}' for my future reference...")
+    write_config!(config)
+    display("You're good to go. Next up is 'sir-syncalot sync' to syncronise your files to S3.")
+  end
+
+  def aws_credentials_valid?(config = read_config())
+    true
+  end
+
+  def bucket_exists?(config = read_config())
+    true
+  end
+
+  def bucket_empty?(config = read_config())
+    true  
+  end
+
+  def create_bucket(config = read_config())
+  end
+
+  def local_file_path_exists?(config = read_config())
+    true
+  end
+
+  def write_config!(config)
+    open(config_path, 'w') { |f| YAML::dump(config, f) }
+  end
+
+  def read_config(reload = false)
+    reload or !@config ? @config = open(config_path, 'r') { |f| YAML::load(f) } : @config
   end
 
   def perform_sync!
-    display("Syncing #{job}...")
+    display("Syncing...")
+    # check can connect, bucket exists, filepath exists
+    # if there was a last backup run at a certain time, get a list of changed files
+    # if no backup has been run, perform a full push (also, md5 checksum comparison 
+    # is only required for files that exist on both origin and source)
   end
 
   def display_help!
@@ -84,12 +147,17 @@ private
     puts(message)
   end
 
+  def ask(question)
+    print(question + ": ")
+    gets.chomp
+  end
+
   def config_exists?
     File.exist?(config_path)
   end
 
   def config_path
-    ENV['HOME'] + "/.sir-syncalot/config.yml"
+    ENV['HOME'] + "/.sir-syncalot.yml"
   end
 
 end
