@@ -12,6 +12,8 @@
 #   - checks for lock, places one otherwise
 #   - does md5 otherwise and syncs with output and logs too!
 
+require 'yaml'
+
 class SirSyncalot
 
   def self.run!(*args)
@@ -35,7 +37,7 @@ private
     if setup_action? and config_exists?
       exit_with_error!("Can't make a setup, because there's already a configuration in '#{config_path}'.")
     elsif sync_action? and !config_exists?
-      exit_with_error!("Can't make a sync, because there's no configuration, try 'sir-syncalot setup'.")
+      exit_with_error!("Can't make a sync, because there's no configuration, try '#{__FILE__} setup'.")
     end
   end
 
@@ -47,7 +49,7 @@ private
     elsif help_action?
       display_help!
     else
-      exit_with_error!("Cannot perform action '#{@action}', try 'sir-syncalot help' for usage.")
+      exit_with_error!("Cannot perform action '#{@action}', try '#{__FILE__} help' for usage.")
     end
   end
 
@@ -90,13 +92,15 @@ private
     end
 
     config[:local_file_path] = ask("What is the (absolute) path that you want to back up? (i.e. /var/www not ./www)")
-    if !local_file_path_exists?
+    if !local_file_path_exists?(config)
       exit_with_error!("I find that the local file path you supplied doesn't exist, wrong much?")
     end
 
+    config[:find_options] = ask("Do you have any options for find ? (e.g. \! -path \"*.git*). Press enter for defaults.")
+
     display("Right, I'm writing out the details you supplied to '#{config_path}' for my future reference...")
     write_config!(config)
-    display("You're good to go. Next up is 'sir-syncalot sync' to syncronise your files to S3.")
+    display("You're good to go. Next up is '#{__FILE__} sync' to syncronise your files to S3.")
   end
 
   def aws_credentials_valid?(config = read_config())
@@ -149,7 +153,7 @@ private
 
   def ask(question)
     print(question + ": ")
-    gets.chomp
+    $stdin.readline.chomp # gets doesn't work here!
   end
 
   def config_exists?
@@ -157,7 +161,7 @@ private
   end
 
   def config_path
-    ENV['HOME'] + "/.sir-syncalot.yml"
+    ENV['HOME'] + "/.sir-sync-a-lot.yml"
   end
 
 end
