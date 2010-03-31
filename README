@@ -1,0 +1,34 @@
+Sir Sync-A-Lot. An optimised S3 sync tool using the power of *nix!
+
+Requirements:
+
+  * Ruby
+  * RubyGems
+  * aws-s3 RubyGem
+  * OpenSSL
+
+To configure, run './sir-sync-a-lot setup' and follow the prompts, you'll
+need your S3 keys, the local file path you want to back up, the bucket name
+to back up to, and any extra options to pass into find (i.e. for ignoring
+filepaths etc).
+
+Then to sync, run './sir-sync-a-lot sync' and away she goes.
+
+This library was written because we needed to be able to back up craploads of
+data without having to worry about if we had enough disk space on the origin. 
+That's where S3 is nice. 
+
+But we wanted an rsync-like tool that wasn't s3sync coz we had to run this on 
+our web server that is already high traffic, without upsetting it too much. Using 
+find, xargs and openssl shell tools we very quickly and efficently checksum a large 
+number of files.
+
+The backup tool is also stateful, it remembers when the last sync was run and will
+use find -cmin instead of a full checksum comparison on each file. Much faster!
+
+Caveats: No tests (yet), find -ctime borked, better logging on the way, etc.
+
+Have fun!
+
+Project wholy sponsored by Envato Pty Ltd. They're the shizzy! P.S. We use this
+in production environments!
