@@ -178,7 +178,7 @@ private
 
   def files_on_localhost_with_checksums
     `find #{read_config[:local_file_path]} #{read_config[:find_options]} -print0 | xargs -0 openssl md5 2> /dev/null`.collect do |line|
-      path, checksum = *line.match(/^MD5\((.*)\)= (.*)$/).captures
+      path, checksum = *line.chomp.match(/^MD5\((.*)\)= (.*)$/).captures
       {:path => path, :checksum => checksum}
     end
   end
