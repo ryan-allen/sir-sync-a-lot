@@ -1,17 +1,5 @@
 #!/usr/bin/env ruby
 
-# todo
-# ./sir-syncalot setup
-#   - asks for aws creds and bucket
-#   - checks if bucket is empty or not exists and prompts and shit
-#   - asks for filepath (abs is best)
-#   - asks for job name (defualts to default) and shit, stores in ~/.sir-syncalot/config.yml
-#   - asks for log path
-# ./sir-syncalot sync [job]
-#   - looks for last sync saved on disk
-#   - checks for lock, places one otherwise
-#   - does md5 otherwise and syncs with output and logs too!
-
 require 'yaml'
 
 class SirSyncalot
@@ -43,9 +31,9 @@ private
 
   def perform_action!
     if setup_action?
-      perform_setup!
+      aquire_lock! { perform_setup! }
     elsif sync_action?
-      perform_sync!
+      aquire_lock! { perform_sync! }
     elsif help_action?
       display_help!
     else
@@ -104,22 +92,23 @@ private
   end
 
   def aws_credentials_valid?(config = read_config())
-    true
+    true # implement this
   end
 
   def bucket_exists?(config = read_config())
-    true
+    true # implement this
   end
 
   def bucket_empty?(config = read_config())
-    true  
+    true # implement this
   end
 
   def create_bucket(config = read_config())
+    # implement this
   end
 
   def local_file_path_exists?(config = read_config())
-    true
+    true # implement this
   end
 
   def write_config!(config)
@@ -131,19 +120,69 @@ private
   end
 
   def perform_sync!
-    display("Syncing...")
-    # check can connect, bucket exists, filepath exists
-    # if there was a last backup run at a certain time, get a list of changed files
-    # if no backup has been run, perform a full push (also, md5 checksum comparison 
-    # is only required for files that exist on both origin and source)
+    if !aws_credentials_valid?
+      exit_with_error("Couldn't connect to S3 with the credentials in #{config_path}.")
+    end
+
+    if !bucket_exists?
+      exit_with_error("Can't find the bucket in S3 specified in #{config_path}.")
+    end
+
+    if !local_file_path_exists?
+      exit_with_error("Local path specified in #{config_path} does not exist.")
+    end
+
+    if last_sync_recorded?
+      sync_start = Time.now
+      # as the backup is stateful, using find -ctime is way less resource intensive
+      local_files_changed_since_last_sync.each { |file| push_file(file) }
+      mark_last_sync!(sync_start)
+    else
+      # note that we do not remove files on s3 that no longer exist on local host. this behaviour
+      # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
+      (new_or_changed_files = files_on_localhost - files_on_s3).each { |file| push_file(file) }
+    end
   end
 
+  def local_files_changed_since_last_sync
+    # use find -ctime from the state, 
+  end
+
+  def files_on_localhost
+    # return uniform list of path w/ checksum, using find w/ xargs and openssl md5
+  end
+
+  def files_on_s3
+    # return uniform key w/ checksum
+  end
+
+  def push_file
+    # xfer speed, logging, etc can occur in this method
+  end
+
+  def mark_last_sync!(time)
+    # write out last sync to config file, or something
+  end
+
+  def aquire_lock!
+    if File.exist?(lock_path)
+      exit_with_error("Found a lock at #{lock_path}, is another instance of #{__FILE__} running?")
+    else
+      system("touch #{lock_path}")
+    end
+
+    yield
+  ensure
+    system("rm #{lock_path}")
+  end
+
+
   def display_help!
-    display("Hahaha. Sif.")
+    display("Go help yourself buddy!")
   end
 
   def exit_with_error!(message)
-    display("Sir Syncalot wails in agony! " + message)
+    display("ERROR: " + message)
     exit
   end
 
@@ -162,6 +201,10 @@ private
 
   def config_path
     ENV['HOME'] + "/.sir-sync-a-lot.yml"
+  end
+
+  def lock_path
+    ENV['HOME'] + "/.sir-sync-a-lot.lock"
   end
 
 end
