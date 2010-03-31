@@ -163,9 +163,13 @@ private
   end
 
   def local_files_changed_since_last_sync
-    # this is kinda borked
-    `/usr/bin/find #{read_config[:local_file_path]} -cmin #{minutes_since_last_sync}`.collect { |line| {:path => line.chomp} }
+    # this is kinda borked, i think
     # `/usr/bin/find #{read_config[:local_file_path]}`.collect { |line| {:path => line.chomp} }
+    `/usr/bin/find #{read_config[:local_file_path]} -cmin #{minutes_since_last_sync}`.collect do |line| 
+      {:path => line.chomp}
+    end.reject do |file|
+      File.directory?(file)
+    end
   end
 
   def minutes_since_last_sync
@@ -173,30 +177,23 @@ private
   end
 
   def files_on_localhost_with_checksums
-    `find #{read_config[:local_file_path]} #{read_config[:find_options]} -print0 | xargs -0 openssl md5 2> /dev/null > /tmp/.sir-sync-a-lot.checksums`
-    open('/tmp/.sir-sync-a-lot.checksums', 'r') do |file|
-      file.collect do |line|
-        path, checksum = *line.match(/^MD5\((.*)\)= (.*)$/).captures
-        {:path => path, :checksum => checksum}
-      end
+    `find #{read_config[:local_file_path]} #{read_config[:find_options]} -print0 | xargs -0 openssl md5 2> /dev/null`.collect do |line|
+      path, checksum = *line.match(/^MD5\((.*)\)= (.*)$/).captures
+      {:path => path, :checksum => checksum}
     end
   end
 
   def files_on_s3
     AWS::S3::Bucket.find(read_config[:aws_dest_bucket]).objects.collect do |obj|
-      # we put a / infront of the key coz aws strips it out, as we compare existing files by using Array#-()
+      # we put a / infront of the key coz AWS strips it out, as we compare existing files by using Array#-()
       {:path => '/' + obj.key, :checksum => obj.etag}
     end
   end
 
   def push_file(file)
     # xfer speed, logging, etc can occur in this method
-    if File.directory?(file[:path])
-      display("Skipping #{file[:path]} (it's a directory).")
-    else
-      display("Pushing #{file[:path]}...")
-      AWS::S3::S3Object.store(file[:path], open(file[:path]), read_config[:aws_dest_bucket])
-    end
+    display("Pushing #{file[:path]}...")
+    AWS::S3::S3Object.store(file[:path], open(file[:path]), read_config[:aws_dest_bucket])
   end
 
   def mark_last_sync!(time)
