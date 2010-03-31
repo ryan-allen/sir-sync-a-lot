@@ -141,36 +141,68 @@ private
       exit_with_error("Local path specified in #{config_path} does not exist.")
     end
 
+    sync_start = Time.now 
+
     if last_sync_recorded?
-      sync_start = Time.now
       # as the backup is stateful, using find -ctime is way less resource intensive
+      display("Sync state exists: performing optimised ctime syncronisation...")
       local_files_changed_since_last_sync.each { |file| push_file(file) }
-      mark_last_sync!(sync_start)
     else
       # note that we do not remove files on s3 that no longer exist on local host. this behaviour
       # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
-      (new_or_changed_files = files_on_localhost - files_on_s3).each { |file| push_file(file) }
+      display("No sync state exists: performing full checksum syncronisation...")
+      (new_or_changed_files = files_on_localhost_with_checksums - files_on_s3).each { |file| push_file(file) }
     end
+
+    mark_last_sync!(sync_start)
+  end
+
+  def last_sync_recorded?
+    # temporarily doing this so we can ensure md5 checksum is working
+    false # read_config[:last_sync_at]
   end
 
   def local_files_changed_since_last_sync
-    # use find -ctime from the state, is way faster than md5sum'ing everythinglololol
+    # this is kinda borked
+    `/usr/bin/find #{read_config[:local_file_path]} -cmin #{minutes_since_last_sync}`.collect { |line| {:path => line.chomp} }
+    # `/usr/bin/find #{read_config[:local_file_path]}`.collect { |line| {:path => line.chomp} }
   end
 
-  def files_on_localhost
-    # return uniform list of path w/ checksum, using find w/ xargs and openssl md5
+  def minutes_since_last_sync
+    ((Time.now - read_config[:last_sync_at]) * 60).ceil
+  end
+
+  def files_on_localhost_with_checksums
+    `find #{read_config[:local_file_path]} #{read_config[:find_options]} -print0 | xargs -0 openssl md5 2> /dev/null > /tmp/.sir-sync-a-lot.checksums`
+    open('/tmp/.sir-sync-a-lot.checksums', 'r') do |file|
+      file.collect do |line|
+        path, checksum = *line.match(/^MD5\((.*)\)= (.*)$/).captures
+        {:path => path, :checksum => checksum}
+      end
+    end
   end
 
   def files_on_s3
-    # return uniform key w/ checksum
+    AWS::S3::Bucket.find(read_config[:aws_dest_bucket]).objects.collect do |obj|
+      # we put a / infront of the key coz aws strips it out, as we compare existing files by using Array#-()
+      {:path => '/' + obj.key, :checksum => obj.etag}
+    end
   end
 
   def push_file(file)
     # xfer speed, logging, etc can occur in this method
+    if File.directory?(file[:path])
+      display("Skipping #{file[:path]} (it's a directory).")
+    else
+      display("Pushing #{file[:path]}...")
+      AWS::S3::S3Object.store(file[:path], open(file[:path]), read_config[:aws_dest_bucket])
+    end
   end
 
   def mark_last_sync!(time)
-    # write out last sync to config file, or something
+    config = read_config
+    config[:last_sync_at] = time
+    write_config!(config)
   end
 
   def aquire_lock!
