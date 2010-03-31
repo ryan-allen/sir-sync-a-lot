@@ -184,7 +184,7 @@ private
   end
 
   def files_on_s3
-    AWS::S3::Bucket.find(read_config[:aws_dest_bucket]).objects.collect do |obj|
+    AWS::S3::Bucket.find(read_config[:aws_dest_bucket]).objects(:max_keys => 1_000_000).collect do |obj|
       # we put a / infront of the key coz AWS strips it out, as we compare existing files by using Array#-()
       {:path => '/' + obj.key, :checksum => obj.etag}
     end
