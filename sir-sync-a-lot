@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require 'yaml'
+%w(rubygems aws/s3 yaml).each { |lib| require(lib) }
 
 class SirSyncalot
 
@@ -84,7 +84,7 @@ private
       exit_with_error!("I find that the local file path you supplied doesn't exist, wrong much?")
     end
 
-    config[:find_options] = ask("Do you have any options for find ? (e.g. \! -path \"*.git*). Press enter for defaults.")
+    config[:find_options] = ask("Do you have any options for find ? (e.g. \! -path \"*.git*). Press enter for none")
 
     display("Right, I'm writing out the details you supplied to '#{config_path}' for my future reference...")
     write_config!(config)
@@ -92,23 +92,32 @@ private
   end
 
   def aws_credentials_valid?(config = read_config())
-    true # implement this
+    AWS::S3::Base.establish_connection!(:access_key_id => config[:aws_access_key], :secret_access_key => config[:aws_secret_key])
+    begin
+      AWS::S3::Service.buckets # AWS::S3 don't try to connect at all until you ask it for something.
+    rescue AWS::S3::InvalidAccessKeyId => e
+      false
+    else
+      true
+    end
   end
 
   def bucket_exists?(config = read_config())
-    true # implement this
+    AWS::S3::Bucket.find(config[:aws_dest_bucket])
+  rescue AWS::S3::NoSuchBucket => e
+    false
   end
 
   def bucket_empty?(config = read_config())
-    true # implement this
+    AWS::S3::Bucket.find(config[:aws_dest_bucket]).empty?
   end
 
   def create_bucket(config = read_config())
-    # implement this
+    AWS::S3::Bucket.create(config[:aws_dest_bucket])
   end
 
   def local_file_path_exists?(config = read_config())
-    true # implement this
+    File.exist?(config[:local_file_path])
   end
 
   def write_config!(config)
@@ -145,7 +154,7 @@ private
   end
 
   def local_files_changed_since_last_sync
-    # use find -ctime from the state, 
+    # use find -ctime from the state, is way faster than md5sum'ing everythinglololol
   end
 
   def files_on_localhost
@@ -156,7 +165,7 @@ private
     # return uniform key w/ checksum
   end
 
-  def push_file
+  def push_file(file)
     # xfer speed, logging, etc can occur in this method
   end
 
@@ -166,14 +175,16 @@ private
 
   def aquire_lock!
     if File.exist?(lock_path)
-      exit_with_error("Found a lock at #{lock_path}, is another instance of #{__FILE__} running?")
-    else
-      system("touch #{lock_path}")
+      # better way is to write out the pid ($$) and read it back in, to make sure it's the same
+      exit_with_error!("Found a lock at #{lock_path}, is another instance of #{__FILE__} running?")
     end
 
-    yield
-  ensure
-    system("rm #{lock_path}")
+    begin
+      system("touch #{lock_path}")
+      yield
+    ensure
+      system("rm #{lock_path}")
+    end
   end
 
 
@@ -182,7 +193,7 @@ private
   end
 
   def exit_with_error!(message)
-    display("ERROR: " + message)
+    display("Gah! " + message)
     exit
   end
 
