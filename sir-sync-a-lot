@@ -129,6 +129,7 @@ private
   end
 
   def perform_sync!
+    display("Starting, performing pre-sync checks...")
     if !aws_credentials_valid?
       exit_with_error("Couldn't connect to S3 with the credentials in #{config_path}.")
     end
@@ -229,7 +230,7 @@ private
   end
 
   def display(message)
-    puts(message)
+    puts("[#{Time.now}] #{message}")
   end
 
   def ask(question)
