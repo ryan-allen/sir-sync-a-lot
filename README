@@ -20,14 +20,14 @@ data without having to worry about if we had enough disk space on the remote.
 That's where S3 is nice. 
 
 We tried s3sync but it blew the crap out of our server load (we do in excess of
-500,000 requests a day (page requests, not including hits for images and what not),
+500,000 requests a day (page views, not including hits for images and what not,
 and the server needs to stay responsive). The secret sauce is using the *nix 
 'find', 'xargs' and 'openssl' commands to generate md5 checksums for comparison. 
-Seems to work quite well for us (we have about 450,000+ files to compare).
+Seems to work quite well for us (we have almost 90,000 files to compare).
 
 Initially the plan was to use find with -ctime but S3 isn't particulary nice about
 returning a full list of objects in a bucket (default is 1000, and I want all 
-450,000, and it ignores me when I ask for 1,000,000 objects). Manifest generation
+90,000, and it ignores me when I ask for 1,000,000 objects). Manifest generation
 on a server under load is fast enough and low enough on resources so we're sticking
 with that in the interim.
 
