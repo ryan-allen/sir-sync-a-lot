@@ -2,15 +2,16 @@ Sir Sync-A-Lot. An optimised S3 sync tool using the power of *nix!
 
 Requirements:
 
-  * Ruby
+  * Ruby 1.8.something
   * RubyGems
   * aws-s3 RubyGem
   * OpenSSL
+  * find and xargs (should be on your *nix straight outta the box)
 
 To configure, run './sir-sync-a-lot setup' and follow the prompts, you'll
 need your S3 keys, the local file path you want to back up, the bucket name
 to back up to, and any extra options to pass into find (i.e. for ignoring
-filepaths etc).
+filepaths etc). It'll write the config to '~/.sir-sync-a-lot.yml'.
 
 Then to sync, run './sir-sync-a-lot sync' and away she goes.
 
@@ -18,10 +19,19 @@ This library was written because we needed to be able to back up craploads of
 data without having to worry about if we had enough disk space on the origin. 
 That's where S3 is nice. 
 
-EDIT: Damn these things go outta date quickly. Just look at the commit log for
-info on how it's changing or changed and junk. Gah!
+We tried s3sync but it blew the crap out of our server load (we do in excess of
+500,000 requests a day, and the server needs to stay responsive). The secret
+sauce is using the *nix 'find', 'xargs' and 'openssl' commands to generate
+md5 checksums for comparison. Seems to work quite well for us (we have about 
+450,000+ files to compare).
 
-FYI when you run the sync, the output will look something like this:
+Initially the plan was to use find with -ctime but S3 isn't particulary nice about
+returning a full list of objects in a bucket (default is 1000, and I want all 
+450,000, and it ignores me when I ask for 1,000,000 objects). Manifest generation
+on a server under load is fast enough and low enough on resources so we're sticking
+with that in the interim.
+
+FYI when you run sync, the output will look something like this:
 
   [Thu Apr 01 11:50:25 +1100 2010] Starting, performing pre-sync checks...
   [Thu Apr 01 11:50:26 +1100 2010] Generating local manifest...
