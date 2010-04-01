@@ -16,7 +16,7 @@ filepaths etc). It'll write the config to '~/.sir-sync-a-lot.yml'.
 Then to sync, run './sir-sync-a-lot sync' and away she goes.
 
 This library was written because we needed to be able to back up craploads of
-data without having to worry about if we had enough disk space on the origin. 
+data without having to worry about if we had enough disk space on the remote. 
 That's where S3 is nice. 
 
 We tried s3sync but it blew the crap out of our server load (we do in excess of
