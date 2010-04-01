@@ -134,59 +134,67 @@ private
     end
 
     if !bucket_exists?
-      exit_with_error("Can't find the bucket in S3 specified in #{config_path}.")
+      exit_with_error!("Can't find the bucket in S3 specified in #{config_path}.")
     end
 
     if !local_file_path_exists?
       exit_with_error("Local path specified in #{config_path} does not exist.")
     end
 
-    sync_start = Time.now 
-
-    if last_sync_recorded?
-      # as the backup is stateful, using find -ctime is way less resource intensive
-      display("Sync state exists: performing optimised ctime syncronisation...")
-      local_files_changed_since_last_sync.each { |file| push_file(file) }
-    else
-      # note that we do not remove files on s3 that no longer exist on local host. this behaviour
-      # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
-      display("No sync state exists: performing full checksum syncronisation...")
-      (new_or_changed_files = files_on_localhost_with_checksums - files_on_s3).each { |file| push_file(file) }
-    end
-
-    mark_last_sync!(sync_start)
+    display("Generating local manifest...")
+    generate_local_manifest
+    display("Fetching remote manifest...")
+    fetch_remote_manifest
+    # note that we do not remove files on s3 that no longer exist on local host. this behaviour
+    # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
+    display("Performing checksum comparison...")
+    (new_or_changed_files = files_on_localhost_with_checksums - files_on_s3).each { |file| push_file(file) }
+    display("Pushing local manifest up to remote...")
+    push_local_manifest_to_remote
+    display("Done like a dinner.")
   end
 
-  def last_sync_recorded?
-    # temporarily doing this so we can ensure md5 checksum is working
-    false # read_config[:last_sync_at]
+  def generate_local_manifest
+    `find #{read_config[:local_file_path]} #{read_config[:find_options]} -print0 | xargs -0 openssl md5 2> /dev/null > /tmp/sir-sync-a-lot.manifest.local`
   end
 
-  def local_files_changed_since_last_sync
-    # this is kinda borked, i think
-    # `/usr/bin/find #{read_config[:local_file_path]}`.collect { |line| {:path => line.chomp} }
-    `/usr/bin/find #{read_config[:local_file_path]} -cmin #{minutes_since_last_sync}`.collect do |line| 
-      {:path => line.chomp}
-    end.reject do |file|
-      File.directory?(file)
-    end
+  def fetch_remote_manifest
+    manifest = AWS::S3::S3Object.find('.manifest', read_config[:aws_dest_bucket]).value
+    open(remote_manifest_path, 'w') { |f| f.write(manifest) }
+  rescue AWS::S3::NoSuchKey => e
+    # do nothing!
   end
 
-  def minutes_since_last_sync
-    ((Time.now - read_config[:last_sync_at]) * 60).ceil
+  def push_local_manifest_to_remote
+    AWS::S3::S3Object.store('.manifest', open(local_manifest_path), read_config[:aws_dest_bucket])
   end
 
   def files_on_localhost_with_checksums
-    `find #{read_config[:local_file_path]} #{read_config[:find_options]} -print0 | xargs -0 openssl md5 2> /dev/null`.collect do |line|
-      path, checksum = *line.chomp.match(/^MD5\((.*)\)= (.*)$/).captures
-      {:path => path, :checksum => checksum}
-    end
+    parse_manifest(local_manifest_path)
   end
 
   def files_on_s3
-    AWS::S3::Bucket.find(read_config[:aws_dest_bucket]).objects(:max_keys => 1_000_000).collect do |obj|
-      # we put a / infront of the key coz AWS strips it out, as we compare existing files by using Array#-()
-      {:path => '/' + obj.key, :checksum => obj.etag}
+    parse_manifest(remote_manifest_path)
+  end
+
+  def local_manifest_path
+    "/tmp/sir-sync-a-lot.manifest.local"
+  end
+
+  def remote_manifest_path
+    "/tmp/sir-sync-a-lot.manifest.remote"
+  end
+
+  def parse_manifest(location)
+    if File.exist?(location)
+      open(location, 'r') do |file|
+        file.collect do |line|
+          path, checksum = *line.chomp.match(/^MD5\((.*)\)= (.*)$/).captures
+          {:path => path, :checksum => checksum}
+        end
+      end
+    else
+      []
     end
   end
 
@@ -194,12 +202,6 @@ private
     # xfer speed, logging, etc can occur in this method
     display("Pushing #{file[:path]}...")
     AWS::S3::S3Object.store(file[:path], open(file[:path]), read_config[:aws_dest_bucket])
-  end
-
-  def mark_last_sync!(time)
-    config = read_config
-    config[:last_sync_at] = time
-    write_config!(config)
   end
 
   def aquire_lock!
