@@ -144,14 +144,12 @@ private
 
     display("Generating local manifest...")
     generate_local_manifest
-    display("Fetching remote manifest...")
+    display("Traversing S3 for remote manifest...")
     fetch_remote_manifest
     # note that we do not remove files on s3 that no longer exist on local host. this behaviour
     # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
     display("Performing checksum comparison...")
     (new_or_changed_files = files_on_localhost_with_checksums - files_on_s3).each { |file| push_file(file) }
-    display("Pushing local manifest up to remote...")
-    push_local_manifest_to_remote
     display("Done like a dinner.")
   end
 
@@ -160,14 +158,18 @@ private
   end
 
   def fetch_remote_manifest
-    manifest = AWS::S3::S3Object.find('.manifest', read_config[:aws_dest_bucket]).value
-    open(remote_manifest_path, 'w') { |f| f.write(manifest) }
-  rescue AWS::S3::NoSuchKey => e
-    # do nothing!
+    @remote_objects_cache = [] # instance vars feel like global variables somehow
+    traverse_s3_for_objects(AWS::S3::Bucket.find(read_config[:aws_dest_bucket]), @remote_objects_cache)
   end
 
-  def push_local_manifest_to_remote
-    AWS::S3::S3Object.store('.manifest', open(local_manifest_path), read_config[:aws_dest_bucket])
+  def traverse_s3_for_objects(bucket, collection, n = 1000, upto = 0, marker = nil)
+    objects = bucket.objects(:marker => marker, :max_keys => n)
+    if objects.size == 0
+      return
+    else
+      objects.each { |object| collection << {:path => "/#{object.key}", :checksum => object.etag} }
+      traverse_s3_for_objects(bucket, collection, n, upto+n, objects.last.key)
+    end
   end
 
   def files_on_localhost_with_checksums
@@ -175,15 +177,11 @@ private
   end
 
   def files_on_s3
-    parse_manifest(remote_manifest_path)
+    @remote_objects_cache
   end
 
   def local_manifest_path
     "/tmp/sir-sync-a-lot.manifest.local"
-  end
-
-  def remote_manifest_path
-    "/tmp/sir-sync-a-lot.manifest.remote"
   end
 
   def parse_manifest(location)
@@ -203,6 +201,8 @@ private
     # xfer speed, logging, etc can occur in this method
     display("Pushing #{file[:path]}...")
     AWS::S3::S3Object.store(file[:path], open(file[:path]), read_config[:aws_dest_bucket])
+  rescue
+    display("ERROR: Could not push '#{file[:path]}': #{$!.inspect}")
   end
 
   def aquire_lock!
