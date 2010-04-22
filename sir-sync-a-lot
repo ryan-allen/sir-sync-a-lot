@@ -176,7 +176,7 @@ private
 
   def files_modified_since(seconds)
     # '! -type d' ignores directories, in local manifest directories are spit out to stderr whereas directories pop up in this query
-    `find #{read_config[:local_file_path]} #{read_config[:find_options]} \! -type d -ctime #{seconds}s`.split("\n").collect { |path| {:path => path } }
+    `find #{read_config[:local_file_path]} #{read_config[:find_options]} \! -type d -ctime -#{seconds}s`.split("\n").collect { |path| {:path => path } }
   end
 
   def update_config_with_sync_state(sync_start)
