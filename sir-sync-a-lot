@@ -131,7 +131,7 @@ private
   def perform_sync!
     display("Starting, performing pre-sync checks...")
     if !aws_credentials_valid?
-      exit_with_error("Couldn't connect to S3 with the credentials in #{config_path}.")
+      exit_with_error!("Couldn't connect to S3 with the credentials in #{config_path}.")
     end
 
     if !bucket_exists?
@@ -139,18 +139,48 @@ private
     end
 
     if !local_file_path_exists?
-      exit_with_error("Local path specified in #{config_path} does not exist.")
+      exit_with_error!("Local path specified in #{config_path} does not exist.")
     end
 
-    display("Generating local manifest...")
-    generate_local_manifest
-    display("Traversing S3 for remote manifest...")
-    fetch_remote_manifest
-    # note that we do not remove files on s3 that no longer exist on local host. this behaviour
-    # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
-    display("Performing checksum comparison...")
-    (new_or_changed_files = files_on_localhost_with_checksums - files_on_s3).each { |file| push_file(file) }
+    sync_start = Time.now
+
+    if last_sync_recorded? # what happens when last sync
+      display("Performing time based comparison...")
+      files_modified_since(seconds_since_last_sync)
+    else
+      display("Performing (potentially expensive) checksum comparison...")
+      display("Generating local manifest...")
+      generate_local_manifest
+      display("Traversing S3 for remote manifest...")
+      fetch_remote_manifest
+      # note that we do not remove files on s3 that no longer exist on local host. this behaviour
+      # may be desirable (ala rsync --delete) but we currently don't support it. ok? sweet.
+      display("Performing checksum comparison...")
+      files_on_localhost_with_checksums - files_on_s3
+    end.each { |file| push_file(file) }
+
+    update_config_with_sync_state(sync_start)
+
     display("Done like a dinner.")
+  end
+
+  def last_sync_recorded?(config = read_config())
+    !!config[:last_sync_at]
+  end
+
+  def seconds_since_last_sync(config = read_config())
+    (config[:last_sync_at] - Time.now).ceil
+  end
+
+  def files_modified_since(seconds)
+    # '! -type d' ignores directories, in local manifest directories are spit out to stderr whereas directories pop up in this query
+    `find #{read_config[:local_file_path]} #{read_config[:find_options]} \! -type d -ctime #{seconds}s`.split("\n").collect { |path| {:path => path } }
+  end
+
+  def update_config_with_sync_state(sync_start)
+    config = read_config()
+    config[:last_sync_at] = sync_start
+    write_config!(config)
   end
 
   def generate_local_manifest
