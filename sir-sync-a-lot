@@ -146,6 +146,8 @@ private
 
     if last_sync_recorded? # what happens when last sync
       display("Performing time based comparison...")
+      seconds = seconds_since_last_sync
+      display("Looking for files changed in the last #{seconds} seconds...")
       files_modified_since(seconds_since_last_sync)
     else
       display("Performing (potentially expensive) checksum comparison...")
@@ -169,7 +171,7 @@ private
   end
 
   def seconds_since_last_sync(config = read_config())
-    (config[:last_sync_at] - Time.now).ceil
+    (Time.now - config[:last_sync_at]).ceil
   end
 
   def files_modified_since(seconds)
