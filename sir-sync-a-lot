@@ -142,13 +142,11 @@ private
       exit_with_error!("Local path specified in #{config_path} does not exist.")
     end
 
-    sync_start = Time.now
+    create_tmp_sync_state
 
-    if last_sync_recorded? # what happens when last sync
+    if last_sync_recorded?
       display("Performing time based comparison...")
-      seconds = seconds_since_last_sync
-      display("Looking for files changed in the last #{seconds} seconds...")
-      files_modified_since(seconds_since_last_sync)
+      files_modified_since_last_sync
     else
       display("Performing (potentially expensive) checksum comparison...")
       display("Generating local manifest...")
@@ -161,22 +159,34 @@ private
       files_on_localhost_with_checksums - files_on_s3
     end.each { |file| push_file(file) }
 
-    update_config_with_sync_state(sync_start)
+    finalize_sync_state
 
     display("Done like a dinner.")
   end
 
-  def last_sync_recorded?(config = read_config())
-    !!config[:last_sync_at]
+  def last_sync_recorded?
+    File.exist?(last_sync_completed)
   end
 
-  def seconds_since_last_sync(config = read_config())
-    (Time.now - config[:last_sync_at]).ceil
+  def create_tmp_sync_state
+    `touch #{last_sync_started}`
   end
 
-  def files_modified_since(seconds)
+  def finalize_sync_state
+    `cp #{last_sync_started} #{last_sync_completed}`
+  end
+
+  def last_sync_started
+    ENV['HOME'] + "/.sir-sync-a-lot.last-sync.started"
+  end
+
+  def last_sync_completed
+    ENV['HOME'] + "/.sir-sync-a-lot.last-sync.completed"
+  end
+
+  def files_modified_since_last_sync
     # '! -type d' ignores directories, in local manifest directories are spit out to stderr whereas directories pop up in this query
-    `find #{read_config[:local_file_path]} #{read_config[:find_options]} \! -type d -ctime -#{seconds}s`.split("\n").collect { |path| {:path => path } }
+    `find #{read_config[:local_file_path]} #{read_config[:find_options]} \! -type d -cnewer #{last_sync_completed}`.split("\n").collect { |path| {:path => path } }
   end
 
   def update_config_with_sync_state(sync_start)
