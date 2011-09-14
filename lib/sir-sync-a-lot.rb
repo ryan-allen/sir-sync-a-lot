@@ -1,9 +1,7 @@
-#!/usr/bin/env ruby
-
-%w(rubygems aws/s3 yaml).each { |lib| require(lib) }
+require 'aws/s3'
+require 'yaml'
 
 class SirSyncalot
-
   def self.run!(*args)
     new(*args).run!
   end
@@ -18,6 +16,8 @@ class SirSyncalot
     validate_inputs!
     perform_action!
   end
+
+  VERSION = '0.0.1'
 
 private
 
@@ -293,5 +293,3 @@ private
   end
 
 end
-
-SirSyncalot.run!(*ARGV)
