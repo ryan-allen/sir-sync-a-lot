@@ -1,19 +1,21 @@
-Sir Sync-A-Lot. An optimised S3 sync tool using the power of *nix!
+# Sir Sync-A-Lot. An optimised S3 sync tool using the power of *nix!
 
-Requirements:
+## Requirements:
 
-  * Ruby 1.8.something
-  * RubyGems
-  * aws-s3 RubyGem
-  * OpenSSL
-  * find and xargs (should be on your *nix straight outta the box)
+* Ruby 1.8.something
+* RubyGems
+* aws-s3 RubyGem
+* OpenSSL
+* find and xargs (should be on your *nix straight outta the box)
 
-To configure, run './sir-sync-a-lot setup' and follow the prompts, you'll
+To configure, run <code>sir-sync-a-lot setup</code> and follow the prompts, you'll
 need your S3 keys, the local file path you want to back up, the bucket name
 to back up to, and any extra options to pass into find (i.e. for ignoring
-filepaths etc). It'll write the config to '~/.sir-sync-a-lot.yml'.
+filepaths etc). It'll write the config to <code>~/.sir-sync-a-lot.yml</code>.
 
-Then to sync, run './sir-sync-a-lot sync' and away she goes.
+Then to sync, run <code>sir-sync-a-lot sync</code> and away she goes.
+
+## Why?
 
 This library was written because we needed to be able to back up craploads of
 data without having to worry about if we had enough disk space on the remote. 
@@ -31,19 +33,25 @@ returning a full list of objects in a bucket (default is 1000, and I want all
 on a server under load is fast enough and low enough on resources so we're sticking
 with that in the interim.
 
+## Etc
+
 FYI when you run sync, the output will look something like this:
 
-  [Thu Apr 01 11:50:25 +1100 2010] Starting, performing pre-sync checks...
-  [Thu Apr 01 11:50:26 +1100 2010] Generating local manifest...
-  [Thu Apr 01 11:50:26 +1100 2010] Fetching remote manifest...
-  [Thu Apr 01 11:50:27 +1100 2010] Performing checksum comparison...
-  [Thu Apr 01 11:50:27 +1100 2010] Pushing /tmp/backups/deep/four...
-  [Thu Apr 01 11:50:28 +1100 2010] Pushing /tmp/backups/three...
-  [Thu Apr 01 11:50:29 +1100 2010] Pushing /tmp/backups/two...
-  [Thu Apr 01 11:50:30 +1100 2010] Pushing local manifest up to remote...
-  [Thu Apr 01 11:50:31 +1100 2010] Done like a dinner.
+    [Thu Apr 01 11:50:25 +1100 2010] Starting, performing pre-sync checks...
+    [Thu Apr 01 11:50:26 +1100 2010] Generating local manifest...
+    [Thu Apr 01 11:50:26 +1100 2010] Fetching remote manifest...
+    [Thu Apr 01 11:50:27 +1100 2010] Performing checksum comparison...
+    [Thu Apr 01 11:50:27 +1100 2010] Pushing /tmp/backups/deep/four...
+    [Thu Apr 01 11:50:28 +1100 2010] Pushing /tmp/backups/three...
+    [Thu Apr 01 11:50:29 +1100 2010] Pushing /tmp/backups/two...
+    [Thu Apr 01 11:50:30 +1100 2010] Pushing local manifest up to remote...
+    [Thu Apr 01 11:50:31 +1100 2010] Done like a dinner.
 
-You could pipe sync into a log file, which might be nice.
+You could pipe sync into a log file, which might be nice, this is what our crontab 
+looks like:
+
+    # run sync backups to s3 every day
+    0 1 * * * /usr/local/bin/rvm 1.8.7 ruby /root/sir-sync-a-lot/sir-sync-a-lot 1>> /var/log/sir-sync-a-lot.log 2>> /var/log/sir-sync-a-lot.error
 
 Have fun!
 
